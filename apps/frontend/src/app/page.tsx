@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState, useEffect, useCallback } from "react";
+import React, { useState, useEffect, useCallback, useRef } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import {
@@ -28,12 +28,16 @@ import {
   DisplayComposition,
   type DisplayGlyphOptions,
   type WebSocketMessage,
+  type LogEntry,
 } from "@/types/nuimo";
 import { Checkbox } from "@/components/ui/checkbox";
 
 type GridType = boolean[][];
 
 export default function Page() {
+  const [log, setLog] = useState<LogEntry[]>([]);
+  const [autoScroll, setAutoScroll] = useState(true);
+  const logEndRef = useRef<HTMLDivElement>(null);
   const [grid, setGrid] = useState<GridType>(
     Array(9)
       .fill(null)
@@ -51,6 +55,12 @@ export default function Page() {
     transition: DisplayTransition.CrossFade,
   });
 
+  const addLogEntry = useCallback((message: string) => {
+    setLog((prevLog) =>
+      [...prevLog, { timestamp: new Date(), message }].slice(-50),
+    ); // Keep last 50 entries
+  }, []);
+
   useEffect(() => {
     const ws = new WebSocket("ws://localhost:3001");
     ws.onopen = () => {
@@ -58,22 +68,48 @@ export default function Page() {
       ws.send(JSON.stringify({ type: "GET_DEVICE_STATUS" }));
     };
     ws.onmessage = (event: MessageEvent) => {
-      const data = JSON.parse(event.data as string) as WebSocketMessage;
-      switch (data.type) {
+      const data = JSON.parse(event.data as string) as WebSocketMessage | null;
+      switch (data?.type) {
         case "DEVICE_STATUS":
           setIsConnected(data.payload.connected);
+          addLogEntry(
+            `Device status: ${data.payload.connected ? "Connected" : "Disconnected"}`,
+          );
           break;
         case "DEVICE_CONNECTED":
           setIsConnected(true);
           setIsConnecting(false);
+          addLogEntry("Device connected");
           break;
         case "DEVICE_DISCONNECTED":
           setIsConnected(false);
+          addLogEntry("Device disconnected");
+          break;
+        case "BATTERY_LEVEL":
+          addLogEntry(`Battery level: ${data.payload}%`);
+          break;
+        case "SIGNAL_STRENGTH":
+          addLogEntry(`Signal strength: ${data.payload} dBm`);
+          break;
+        case "SWIPE":
+          addLogEntry(`Swipe detected: ${data.payload}`);
+          break;
+        case "TOUCH":
+          addLogEntry(`Touch detected: ${data.payload}`);
+          break;
+        case "ROTATE":
+          addLogEntry(
+            `Rotation: delta ${data.payload.delta}, value ${data.payload.rotation}`,
+          );
+          break;
+        case "HOVER":
+          addLogEntry(`Hover: proximity ${data.payload}`);
           break;
         case "ERROR":
           console.error("Received error:", data.payload);
           alert(data.payload);
           setIsConnecting(false);
+          addLogEntry(`Error: ${data.payload}`);
           break;
       }
     };
@@ -83,7 +119,13 @@ export default function Page() {
     return () => {
       ws.close();
     };
-  }, []);
+  }, [addLogEntry]);
+
+  useEffect(() => {
+    if (autoScroll && logEndRef.current) {
+      logEndRef.current.scrollIntoView({ behavior: "smooth" });
+    }
+  }, [log, autoScroll]);
 
   const toggleCell = (row: number, col: number): void => {
     setGrid((prevGrid) => {
@@ -273,7 +315,7 @@ export default function Page() {
             </div>
           )}
           <div className="mt-4">
-            <h3 className="mb-2 text-xl font-semibold">Import Grid:</h3>
+            <h3 className="mb-2 text-xl font-semibold">Import Grid</h3>
             <div className="flex space-x-2">
               <Input
                 value={importString}
@@ -291,7 +333,7 @@ export default function Page() {
         </div>
 
         <div className="w-64">
-          <h3 className="mb-2 text-xl font-semibold">Nuimo Device Control:</h3>
+          <h3 className="mb-2 text-xl font-semibold">Nuimo Device Control</h3>
           <div className="space-y-4">
             {!isConnected ? (
               <Button
@@ -431,6 +473,34 @@ export default function Page() {
               <Send size={16} className="mr-2" />
               Display on Nuimo
             </Button>
+          </div>
+        </div>
+
+        <div className="flex-1">
+          <h3 className="mb-2 text-xl font-semibold">Event Log</h3>
+          <div className="mb-2 flex items-center space-x-2">
+            <Checkbox
+              id="autoScroll"
+              checked={autoScroll}
+              onCheckedChange={(checked) => setAutoScroll(checked as boolean)}
+            />
+            <label
+              htmlFor="autoScroll"
+              className="text-sm font-medium leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70"
+            >
+              Auto-scroll
+            </label>
+          </div>
+          <div className="h-96 space-y-1 overflow-y-auto rounded border border-gray-300 bg-gray-50 p-2 text-xs">
+            {log.map((entry, index) => (
+              <div key={index}>
+                <span className="text-gray-500">
+                  {entry.timestamp.toLocaleTimeString()}:{" "}
+                </span>
+                {entry.message}
+              </div>
+            ))}
+            <div ref={logEndRef} />
           </div>
         </div>
       </div>

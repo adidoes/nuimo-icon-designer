@@ -53,6 +53,30 @@ wss.on("connection", (ws: WebSocket) => {
               nuimoDevice = null;
             });
 
+            nuimoDevice.on("batteryLevel", (level) => {
+              broadcast({ type: "BATTERY_LEVEL", payload: level });
+            });
+
+            nuimoDevice.on("rssi", (rssi) => {
+              broadcast({ type: "SIGNAL_STRENGTH", payload: rssi });
+            });
+
+            nuimoDevice.on("swipe", (direction) => {
+              broadcast({ type: "SWIPE", payload: direction });
+            });
+
+            nuimoDevice.on("touch", (area) => {
+              broadcast({ type: "TOUCH", payload: area });
+            });
+
+            nuimoDevice.on("rotate", (delta, rotation) => {
+              broadcast({ type: "ROTATE", payload: { delta, rotation } });
+            });
+
+            nuimoDevice.on("hover", (proximity) => {
+              broadcast({ type: "HOVER", payload: proximity });
+            });
+
             broadcast({ type: "DEVICE_CONNECTED" });
           } catch (error) {
             console.error("Failed to connect:", error);
